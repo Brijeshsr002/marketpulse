@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const ids = params.get("symbols")?.split(",").map((s) => s.trim()).filter(Boolean);
   const market = params.get("market");
   if (market && !isMarket(market)) return json({ error: "market must be crypto, forex, us or nse" }, 400);
-  const result = await getQuotes({ ids, market: market ?? undefined });
+  const result = await getQuotes({ ids, market: isMarket(market) ? market : undefined });
   return json({ asOf: new Date().toISOString(), ...result });
 }
 
