@@ -150,7 +150,11 @@ export function SignalTracker() {
           )}
 
           <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center">
-            <div className="text-xs uppercase tracking-wide text-muted">Rule says for the next 1-min candle</div>
+            <div className="text-xs uppercase tracking-wide text-muted">Market</div>
+            <div className="text-2xl font-semibold">
+              {SYMBOLS.find((s) => s.id === symbol)?.name} <span className="text-muted">({symbol})</span>
+            </div>
+            <div className="mt-4 text-xs uppercase tracking-wide text-muted">Rule says for the next 1-min candle</div>
             {signal && marketOpen ? (
               <>
                 <div className={`mt-2 text-5xl font-bold ${signal.side === "UP" ? "text-up" : "text-down"}`}>{signal.side === "UP" ? "▲ UP" : "▼ DOWN"}</div>
