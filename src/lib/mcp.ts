@@ -1,5 +1,6 @@
 import "server-only";
 import { getCandles, getCandlesByInterval, getOverview, getQuotes, INTERVALS, isInterval, isRange, RANGES } from "./market";
+import { ema, nextCandleSignal, rsi } from "./indicators";
 import { isMarket, MARKETS, SYMBOLS } from "./symbols";
 
 // Minimal stateless MCP server (Streamable HTTP transport, JSON responses only).
@@ -10,6 +11,8 @@ const SERVER_INFO = { name: "marketpulse", title: "MarketPulse live markets", ve
 
 const marketEnum = { type: "string", enum: MARKETS.map((m) => m.id), description: "crypto, forex, us (US stocks) or nse (India)" };
 const readOnly = { readOnlyHint: true, openWorldHint: true };
+// If the forming bar is older than this (seconds), the market isn't trading.
+const LIVE_MAX_AGE: Record<(typeof INTERVALS)[number], number> = { "1m": 180, "5m": 600, "15m": 1800, "1h": 7200, "1d": 4 * 86400 };
 
 type Tool = {
   name: string;
@@ -93,6 +96,45 @@ const TOOLS: Tool[] = [
     description: "Snapshot of all four markets with top gainers and losers. Good starting point for 'how are markets today?'.",
     inputSchema: { type: "object", properties: {} },
     run: () => getOverview(),
+  },
+  {
+    name: "analyze_market",
+    title: "Technical analysis",
+    description:
+      "Computed indicators on closed candles: EMA9/EMA21 trend, RSI(14), recent support/resistance, whether the market is trading, " +
+      "and the experimental next-candle rule used by the /signals tracker. Quote these numbers instead of estimating from charts. " +
+      "The rule is unproven: short-term candles are near coin-flips, so present it as a hypothesis, never as a sure signal.",
+    inputSchema: {
+      type: "object",
+      properties: { symbol: { type: "string" }, interval: { type: "string", enum: [...INTERVALS], default: "1m" } },
+      required: ["symbol"],
+    },
+    run: async ({ symbol, interval = "1m" }) => {
+      if (!isInterval(interval)) throw new Error(`interval must be one of ${INTERVALS.join(", ")}`);
+      const bars = await getCandlesByInterval(String(symbol), interval);
+      const forming = bars.at(-1);
+      const closed = bars.slice(0, -1);
+      if (!forming || closed.length < 30) throw new Error("Not enough candles to analyse");
+      const closes = closed.map((b) => b.close);
+      const recent = closed.slice(-60);
+      const signal = nextCandleSignal(closed);
+      return {
+        symbol: String(symbol).toUpperCase(),
+        interval,
+        price: forming.close,
+        formingCandleStart: new Date(forming.time * 1000).toISOString(),
+        marketTrading: Date.now() / 1000 - forming.time < LIVE_MAX_AGE[interval],
+        emaFast9: ema(closes, 9).at(-1),
+        emaSlow21: ema(closes, 21).at(-1),
+        trend: signal && signal.emaFast >= signal.emaSlow ? "up" : "down",
+        rsi14: rsi(closes),
+        support: Math.min(...recent.map((b) => b.low)),
+        resistance: Math.max(...recent.map((b) => b.high)),
+        lastClosedCandles: closed.slice(-5),
+        experimentalRule: signal && { nextCandle: signal.side, reason: signal.reason },
+        disclaimer: "Indicators describe the past. No rule reliably predicts the next candle. Not financial advice; use demo accounts to test.",
+      };
+    },
   },
 ];
 

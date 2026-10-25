@@ -30,6 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </Link>
             <div className="flex items-center gap-1 text-sm">
               <Link href="/" className="rounded-lg px-3 py-1.5 text-muted hover:text-foreground">Markets</Link>
+              <Link href="/signals" className="rounded-lg px-3 py-1.5 text-muted hover:text-foreground">Signals</Link>
               <Link href="/docs" className="rounded-lg px-3 py-1.5 text-muted hover:text-foreground">AI Docs</Link>
               <Link href="/docs#mcp" className="rounded-lg bg-accent px-3 py-1.5 font-medium text-white hover:opacity-90">Connect agent</Link>
             </div>
