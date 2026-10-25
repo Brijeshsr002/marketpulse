@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatCompact, formatPrice } from "@/lib/format";
 import { findSymbol } from "@/lib/symbols";
 
-type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
+export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 const INTERVALS = ["1m", "5m", "15m", "1h", "1d"] as const;
 type Interval = (typeof INTERVALS)[number];
@@ -21,7 +21,31 @@ function upsert(candles: Candle[], c: Candle) {
   return candles;
 }
 
-export function PriceChart({ symbol, livePrice }: { symbol: string; livePrice?: number }) {
+// Bar sizes whose boundaries line up with exchange opens, so a tick can start a new bar client-side.
+const BAR_SECONDS: Partial<Record<Interval, number>> = { "1m": 60, "5m": 300, "15m": 900 };
+
+/** Fold one trade (price at unix time t) into the series: extend the forming bar or open the next one. */
+function foldTick(candles: Candle[], price: number, t: number, interval: Interval) {
+  const last = candles[candles.length - 1];
+  if (!last || t < last.time) return candles;
+  const sec = BAR_SECONDS[interval];
+  const bar = sec ? Math.floor(t / sec) * sec : last.time;
+  if (bar > last.time) return upsert(candles, { time: bar, open: price, high: price, low: price, close: price, volume: 0 });
+  if (price === last.close) return candles;
+  return upsert(candles, { ...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price) });
+}
+
+export function PriceChart({
+  symbol,
+  className = "h-64",
+  onLast,
+}: {
+  symbol: string;
+  /** Height of the plot area (Tailwind class). */
+  className?: string;
+  /** Called with the forming candle whenever it changes, for live price headers. */
+  onLast?: (c: Candle) => void;
+}) {
   const [interval, setBarSize] = useState<Interval>("1m");
   const [mode, setMode] = useState<"candles" | "line">("candles");
   const key = `${symbol}:${interval}`;
@@ -38,7 +62,7 @@ export function PriceChart({ symbol, livePrice }: { symbol: string; livePrice?: 
         .then((d) => !cancelled && setData({ key, candles: d.candles ?? [], error: d.error }))
         .catch((e) => !cancelled && setData({ key, candles: [], error: String(e) }));
     load();
-    const timer = setInterval(load, pair ? 300_000 : interval === "1m" ? 15_000 : 60_000);
+    const timer = setInterval(load, pair ? 300_000 : 30_000);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -57,14 +81,33 @@ export function PriceChart({ symbol, livePrice }: { symbol: string; livePrice?: 
     return () => ws.close();
   }, [pair, interval, key]);
 
+  // Forex / stocks / NSE: poll the latest trade every second and fold it into the forming candle.
+  useEffect(() => {
+    if (pair) return;
+    let cancelled = false;
+    const tick = () =>
+      fetch(`/api/v1/quotes?symbols=${symbol}`)
+        .then((r) => r.json())
+        .then((d) => {
+          const q = d.quotes?.[0];
+          if (cancelled || !q) return;
+          const t = Math.floor(Date.parse(q.time) / 1000);
+          setData((cur) => (cur.key === key && cur.candles.length ? { ...cur, candles: foldTick(cur.candles, q.price, t, interval) } : cur));
+        })
+        .catch(() => {});
+    const timer = setInterval(tick, 1_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pair, symbol, interval, key]);
+
   const loading = data.key !== key;
-  const candles = useMemo(() => {
-    // Non-crypto: fold the latest polled quote into the forming candle so it moves between refreshes.
-    if (pair || loading || livePrice == null || !data.candles.length) return data.candles;
-    const last = data.candles[data.candles.length - 1];
-    const live = { ...last, close: livePrice, high: Math.max(last.high, livePrice), low: Math.min(last.low, livePrice) };
-    return [...data.candles.slice(0, -1), live];
-  }, [data, loading, livePrice, pair]);
+  const candles = data.candles;
+  const lastBar = loading ? undefined : candles[candles.length - 1];
+  useEffect(() => {
+    if (lastBar) onLast?.(lastBar);
+  }, [lastBar, onLast]);
 
   const geom = useMemo(() => {
     if (candles.length < 2) return null;
@@ -133,7 +176,7 @@ export function PriceChart({ symbol, livePrice }: { symbol: string; livePrice?: 
         {!loading && !geom && <div className="absolute inset-0 grid place-items-center text-sm text-muted">{data.error ?? "No data yet"}</div>}
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="h-64 w-full"
+          className={`${className} w-full`}
           preserveAspectRatio="none"
           onMouseLeave={() => setHover(null)}
           onMouseMove={(e) => {

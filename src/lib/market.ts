@@ -228,8 +228,8 @@ export async function getQuotes(opts: { ids?: string[]; market?: Market }): Prom
   const crypto = symbols.filter((s) => s.binance);
   const others = symbols.filter((s) => s.yahoo);
   const settled = await Promise.allSettled([
-    cached(`q:crypto:${crypto.map((s) => s.id).join(",")}`, 5_000, () => cryptoQuotes(crypto)),
-    ...others.map((s) => cached(`q:${s.id}`, 5_000, () => yahooQuote(s)).then((q) => [q])),
+    cached(`q:crypto:${crypto.map((s) => s.id).join(",")}`, 1_000, () => cryptoQuotes(crypto)),
+    ...others.map((s) => cached(`q:${s.id}`, 1_000, () => yahooQuote(s)).then((q) => [q])),
   ]);
 
   const quotes: Quote[] = [];

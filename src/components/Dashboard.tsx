@@ -25,7 +25,7 @@ type Quote = {
 
 type Tab = Market | "all";
 
-const POLL_MS = 10_000;
+const POLL_MS = 3_000;
 const CRYPTO = SYMBOLS.filter((s) => s.binance);
 const PAIR_TO_ID = new Map(CRYPTO.map((s) => [s.binance!, s.id]));
 
@@ -191,7 +191,12 @@ export function Dashboard() {
                         {current.id} <span className="text-sm font-normal text-muted">{current.name}</span>
                       </h2>
                     </div>
-                    <span className="rounded-md bg-panel-2 px-2 py-1 text-xs text-muted">{current.currency}</span>
+                    <Link
+                      href={`/chart/${current.id}`}
+                      className="rounded-md bg-panel-2 px-2.5 py-1 text-xs font-medium text-muted hover:text-foreground"
+                    >
+                      ⛶ Big chart
+                    </Link>
                   </div>
                   <div className="mt-3 flex items-baseline gap-3">
                     <span className="font-mono text-3xl font-semibold tabular">{formatPrice(current.price)}</span>
@@ -205,7 +210,7 @@ export function Dashboard() {
                     <Stat label="Volume" value={formatCompact(current.volume)} />
                   </dl>
                   <div className="mt-5">
-                    <PriceChart symbol={current.id} livePrice={current.price} />
+                    <PriceChart symbol={current.id} />
                   </div>
                 </>
               ) : (
