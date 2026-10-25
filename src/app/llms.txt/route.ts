@@ -17,7 +17,7 @@ export async function GET() {
 ## REST API
 - [Symbols](${base}/api/v1/symbols): GET, optional ?market=crypto|forex|us|nse
 - [Quotes](${base}/api/v1/quotes?symbols=BTC,AAPL,NIFTY): GET ?symbols=ID,ID or ?market=
-- [Candles](${base}/api/v1/candles?symbol=BTC&range=1d): GET ?symbol=&range=1d|5d|1mo|6mo|1y
+- [Candles](${base}/api/v1/candles?symbol=BTC&interval=1m): GET ?symbol=&interval=1m|5m|15m|1h|1d (latest 240 bars) or &range=1d|5d|1mo|6mo|1y
 - [Overview](${base}/api/v1/overview): GET, all markets plus top gainers/losers
 
 ## Symbols

@@ -23,7 +23,7 @@ const TOOLS = [
   ["list_symbols", "market?", "Every symbol id, name and market. Agents call this first."],
   ["get_quote", "symbol", "Live price, change, % change, day high/low, volume."],
   ["get_quotes", "symbols[]? · market?", "Several quotes at once, or a whole market."],
-  ["get_candles", "symbol · range?", "OHLCV history: 1d, 5d, 1mo, 6mo, 1y."],
+  ["get_candles", "symbol · interval? · range?", "OHLCV candles: 1m, 5m, 15m, 1h, 1d bars (latest 240), or a 1d…1y window."],
   ["market_overview", "—", "All markets plus top 5 gainers and losers."],
 ];
 
@@ -137,7 +137,7 @@ export default function DocsPage() {
             {[
               ["/api/v1/symbols", "?market=crypto|forex|us|nse", "List symbols"],
               ["/api/v1/quotes", "?symbols=BTC,AAPL  or  ?market=nse", "Live quotes"],
-              ["/api/v1/candles", "?symbol=BTC&range=1d|5d|1mo|6mo|1y", "OHLCV history"],
+              ["/api/v1/candles", "?symbol=BTC&interval=1m|5m|15m|1h|1d  or  &range=1d…1y", "OHLCV candles"],
               ["/api/v1/overview", "", "All markets plus top gainers/losers"],
             ].map(([path, query, desc]) => (
               <div key={path} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-panel px-4 py-3">

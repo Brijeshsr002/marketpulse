@@ -1,5 +1,5 @@
 import "server-only";
-import { getCandles, getOverview, getQuotes, isRange, RANGES } from "./market";
+import { getCandles, getCandlesByInterval, getOverview, getQuotes, INTERVALS, isInterval, isRange, RANGES } from "./market";
 import { isMarket, MARKETS, SYMBOLS } from "./symbols";
 
 // Minimal stateless MCP server (Streamable HTTP transport, JSON responses only).
@@ -63,16 +63,28 @@ const TOOLS: Tool[] = [
   {
     name: "get_candles",
     title: "Get price history",
-    description: "OHLCV candles for charting or technical analysis. Ranges: 1d (5-min bars), 5d (30-min), 1mo, 6mo, 1y.",
+    description:
+      "OHLCV candles for charting or technical analysis. Pass `interval` (1m, 5m, 15m, 1h, 1d) for the latest 240 bars of that size, " +
+      "or `range` (1d = 5-min bars, 5d = 30-min, 1mo, 6mo, 1y) for a whole time window. Use interval=1m for 1-minute candles.",
     inputSchema: {
       type: "object",
-      properties: { symbol: { type: "string" }, range: { type: "string", enum: [...RANGES], default: "1d" } },
+      properties: {
+        symbol: { type: "string" },
+        interval: { type: "string", enum: [...INTERVALS] },
+        range: { type: "string", enum: [...RANGES], default: "1d" },
+      },
       required: ["symbol"],
     },
-    run: async ({ symbol, range = "1d" }) => {
+    run: async ({ symbol, interval, range = "1d" }) => {
+      const id = String(symbol);
+      if (interval !== undefined) {
+        if (!isInterval(interval)) throw new Error(`interval must be one of ${INTERVALS.join(", ")}`);
+        const candles = await getCandlesByInterval(id, interval);
+        return { symbol: id.toUpperCase(), interval, count: candles.length, candles };
+      }
       if (!isRange(range)) throw new Error(`range must be one of ${RANGES.join(", ")}`);
-      const candles = await getCandles(String(symbol), range);
-      return { symbol: String(symbol).toUpperCase(), range, count: candles.length, candles };
+      const candles = await getCandles(id, range);
+      return { symbol: id.toUpperCase(), range, count: candles.length, candles };
     },
   },
   {

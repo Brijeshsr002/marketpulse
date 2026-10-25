@@ -43,6 +43,23 @@ export function isRange(value: unknown): value is Range {
   return RANGES.includes(value as Range);
 }
 
+/** Bar sizes for candlestick charts. Each returns up to MAX_BARS of the most recent candles. */
+export const INTERVALS = ["1m", "5m", "15m", "1h", "1d"] as const;
+export type Interval = (typeof INTERVALS)[number];
+const MAX_BARS = 240;
+// Yahoo needs a lookback range long enough to fill MAX_BARS; Binance takes the bar size directly.
+const YAHOO_LOOKBACK: Record<Interval, [range: string, interval: string]> = {
+  "1m": ["1d", "1m"],
+  "5m": ["5d", "5m"],
+  "15m": ["5d", "15m"],
+  "1h": ["1mo", "60m"],
+  "1d": ["1y", "1d"],
+};
+
+export function isInterval(value: unknown): value is Interval {
+  return INTERVALS.includes(value as Interval);
+}
+
 // Small in-memory TTL cache so bursts of dashboard/agent calls don't hammer upstream APIs.
 const cache = new Map<string, { exp: number; value: Promise<unknown> }>();
 
@@ -85,8 +102,8 @@ type YahooChart = {
   };
 };
 
-async function yahooChart(ticker: string, range: Range) {
-  const url = `${YAHOO}/${encodeURIComponent(ticker)}?range=${range}&interval=${YAHOO_INTERVAL[range]}`;
+async function yahooChart(ticker: string, range: string, interval: string) {
+  const url = `${YAHOO}/${encodeURIComponent(ticker)}?range=${range}&interval=${interval}`;
   const data = await getJson<YahooChart>(url);
   const result = data.chart.result?.[0];
   if (!result) throw new Error(data.chart.error?.description ?? `No data for ${ticker}`);
@@ -124,8 +141,7 @@ type BinanceTicker = {
 };
 type BinanceKline = [number, string, string, string, string, string, ...unknown[]];
 
-async function binanceCandles(pair: string, range: Range): Promise<Candle[]> {
-  const [interval, limit] = BINANCE_INTERVAL[range];
+async function binanceCandles(pair: string, interval: string, limit: number): Promise<Candle[]> {
   const rows = await getJson<BinanceKline[]>(`${BINANCE}/klines?symbol=${pair}&interval=${interval}&limit=${limit}`);
   return rows.map((k) => ({
     time: Math.floor(k[0] / 1000),
@@ -170,7 +186,7 @@ async function cryptoQuotes(symbols: SymbolInfo[]): Promise<Quote[]> {
 }
 
 async function yahooQuote(s: SymbolInfo): Promise<Quote> {
-  const result = await yahooChart(s.yahoo!, "1d");
+  const result = await yahooChart(s.yahoo!, "1d", YAHOO_INTERVAL["1d"]);
   const m = result.meta;
   const prev = m.chartPreviousClose ?? m.previousClose ?? m.regularMarketPrice;
   const change = m.regularMarketPrice - prev;
@@ -233,8 +249,21 @@ export async function getCandles(id: string, range: Range): Promise<Candle[]> {
   const s = findSymbol(id);
   if (!s) throw new Error(`Unknown symbol "${id}"`);
   return cached(`c:${s.id}:${range}`, 30_000, async () =>
-    s.binance ? binanceCandles(s.binance, range) : yahooCandles(await yahooChart(s.yahoo!, range)),
+    s.binance
+      ? binanceCandles(s.binance, ...BINANCE_INTERVAL[range])
+      : yahooCandles(await yahooChart(s.yahoo!, range, YAHOO_INTERVAL[range])),
   );
+}
+
+/** The most recent candles of a fixed bar size, e.g. 1-minute candles for a live chart. */
+export async function getCandlesByInterval(id: string, interval: Interval): Promise<Candle[]> {
+  const s = findSymbol(id);
+  if (!s) throw new Error(`Unknown symbol "${id}"`);
+  return cached(`ci:${s.id}:${interval}`, interval === "1m" ? 10_000 : 30_000, async () => {
+    if (s.binance) return binanceCandles(s.binance, interval, MAX_BARS);
+    const [range, yahooInterval] = YAHOO_LOOKBACK[interval];
+    return yahooCandles(await yahooChart(s.yahoo!, range, yahooInterval)).slice(-MAX_BARS);
+  });
 }
 
 /** Per-market snapshot: every quote plus top gainers/losers. */
